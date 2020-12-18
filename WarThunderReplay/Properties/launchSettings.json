@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "WarThunderReplay": {
+      "commandName": "Project",
+      "commandLineArgs": "\"D:\\#wrplu\\src\\wt_tools\\Replays\\Dev\\Centipede.wrplu\""
+    }
+  }
+}
