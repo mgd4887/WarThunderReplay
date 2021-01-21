@@ -23,19 +23,30 @@ namespace WarThunderReplay
         /// <returns> A subclass of the TypedPacket superclass</returns>
         public TypedPacket Classify(int x)
         {
+            //Console.WriteLine(_binaryData.ToHex());
             var _ = _binaryData.GetBytes(_lengthOffset); //ignored header for packet length
             var time = _binaryData.GetBytes(4); // float representing match time
-            // packet main types
+            _ = _binaryData.GetBytes(1);
+            // packet main types 1.43
             // 00 = PT_STOP_REPLAY
             // 01 = PT_BEGIN_PLAY
             // 02 = PT_AIRCRAFT_DATA_SMALL
             // 03 = PT_MPI -- has sub types
+
+            Console.WriteLine("\t data: " + _binaryData.ToHex());
+
             var packetMainType = _binaryData.GetByte(); //byte representing the packet type;
-            if (packetMainType > 0x03)
+
+            if (packetMainType != 1)
             {
-                throw new ArgumentOutOfRangeException();
+                Console.WriteLine("non 1 packet type");
             }
 
+            Console.WriteLine("Packet Number: " + x + "\tPacket Type: " + packetMainType.ToString("X"));
+
+
+
+            /*
             switch ((PacketType)packetMainType)
             {
                 case PacketType.PT_STOP_REPLAY:
@@ -53,6 +64,7 @@ namespace WarThunderReplay
                     Console.WriteLine(PacketType.PT_MPI + "\t" + mpiType);
                     break;
             }
+            */
             return null;
         }
     }

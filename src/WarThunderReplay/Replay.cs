@@ -2,8 +2,12 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Text;
+using ICSharpCode.SharpZipLib.Zip;
+using ICSharpCode.SharpZipLib.Zip.Compression;
+using ICSharpCode.SharpZipLib.Zip.Compression.Streams;
 
 namespace WarThunderReplay
 {
@@ -13,6 +17,8 @@ namespace WarThunderReplay
         private List<Packet> _binaryPackets;
         private List <TypedPacket> _typedPackets;
         private string _fileName;
+        private readonly byte[] replayMagicBytes = { 0xE5, 0xAC, 0x00, 0x10 };
+        private readonly byte[] blkMagicBytes = { 0x00, 0x42, 0x42, 0x46 };
 
         public Replay(string fileName)
         {
@@ -23,17 +29,102 @@ namespace WarThunderReplay
         }
 
         /// <summary>
+        /// parses the header of a replay wprl file.
+        /// </summary>
+        public void ParseHeader()
+        {
+            var replayMagic = _binaryData.GetBytes(4);
+            if (replayMagic.Equals(replayMagicBytes))
+            {
+                throw new InvalidDataException("Not a replay file; magic number mismatch");
+            }
+
+            var replayFileVersion = _binaryData.GetBytes(4);
+            var map = _binaryData.GetBytes(128);
+            var missionFile = _binaryData.GetBytes(260);
+            var missionName = _binaryData.GetBytes(128);
+            var time = _binaryData.GetBytes(128);
+            var weather = _binaryData.GetBytes(32);
+            var unknown0 = _binaryData.GetBytes(92);
+            var missionNameLocalization = _binaryData.GetBytes(128);
+            var unknown1 = _binaryData.GetBytes(60);
+            var battleType = _binaryData.GetBytes(128);
+            
+            var _ = _binaryData.EndAndGetCurrentSegmentBytes();
+
+            var blkMagic = _binaryData.GetBytes(4);
+            if (blkMagic.Equals(blkMagicBytes))
+            {
+                throw new InvalidDataException("BLK file not found at expected offset");
+            }
+
+            var unknown2 = _binaryData.GetBytes(4);
+            var missionblkLength = BitConverter.ToUInt32(_binaryData.GetBytes(4));
+            var missionblkData = _binaryData.GetBytes((int) missionblkLength); // lossy conversion. 
+
+            var missionblkFile = _binaryData.EndAndGetCurrentSegmentBytes(); // all BLK data in one var;
+
+            var Packets = DecompressZLibStream(_binaryData); // TODO: how long is this part?
+
+            var bbf = new byte[] { 0x00, 0x42, 0x42, 0x46, 0x03, 0x00 };
+            var lastBbfIndex = _binaryData.BackSearch(bbf);
+            if (lastBbfIndex > 0x445) // server replays will not contain results. 
+            {
+                _binaryData.Seek(lastBbfIndex);
+                var hasResults = true;
+                var resultsblkMagic = _binaryData.GetBytes(4);
+                var resultsUnknown = _binaryData.GetBytes(4);
+                var resultsblkLength = BitConverter.ToUInt32(_binaryData.GetBytes(4));
+                var resultsblkData = _binaryData.GetBytes((int) resultsblkLength); // lossy conversion.
+
+                var resultsblkFile = _binaryData.EndAndGetCurrentSegmentBytes(); // all BLK data in one var;
+            }
+
+
+
+
+        }
+
+        private byte[] DecompressZLibStream(ByteStream binaryData)
+        {
+            var input = binaryData.GetAllBytesLeft();
+            input = input.Skip(2).ToArray(); // remove zlib header.
+            
+            using (var inputStream = new MemoryStream(input))
+            {
+                using (var outputStream = new MemoryStream())
+                {
+                    using (DeflateStream decompressionStream =
+                        new DeflateStream(inputStream, CompressionMode.Decompress))
+                    {
+                        decompressionStream.CopyTo(outputStream);
+                    }
+
+                    var output = outputStream.ToArray();
+                    return output;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
         /// separate out each packet.
         /// </summary>
         public void Parse()
         {
             int offset = 0x0;
+            int i = 0;
             while (_binaryData.HasMore())
             {
+                if (i == 129)
+                {
+                    Console.WriteLine("");
+                }
                 ExtractNextPacket();
+                i++;
             }
 
-            int i = 0;
+            i = 0;
             foreach (var binaryPacket in _binaryPackets)
             {
                 _typedPackets.Add(binaryPacket.Classify(i));
@@ -51,6 +142,7 @@ namespace WarThunderReplay
             int lengthOffset = 0;
             if ((magicNumber & 0x80) > 1) // 1000 0000
             {
+                var test = (magicNumber - 0x80);
                 packetLength = (ulong) (magicNumber - 0x80);
                 lengthOffset = 1;
             }
@@ -111,11 +203,9 @@ namespace WarThunderReplay
                 Byte[] allBytes = File.ReadAllBytes(fileName);
                 return new ByteStream(allBytes);
             }
-            else
-            {
-                // Guarantee that this is the exception thrown 
-                throw new FileNotFoundException();
-            }
+
+            // Guarantee that this is the exception thrown 
+            throw new FileNotFoundException();
         }
     }
 }

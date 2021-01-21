@@ -2,7 +2,7 @@
   "profiles": {
     "WarThunderReplay": {
       "commandName": "Project",
-      "commandLineArgs": "\"D:\\#wrplu\\src\\wt_tools\\Replays\\Dev\\Centipede.wrplu\""
+      "commandLineArgs": "\"C:\\Users\\MikePC\\source\\repos\\replays\\2.3\\#2021.01.09 14.05.24.wrpl\" "
     }
   }
 }
