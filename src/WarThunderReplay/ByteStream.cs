@@ -51,13 +51,13 @@ namespace WarThunderReplay
 
         public string ToHex()
         {
-            string output = "";
+            var output = new StringBuilder();
             foreach (var b in _bytes)
             {
-                output += b.ToString("X2");
+                output.Append(b.ToString("X2"));
             }
 
-            return output;
+            return output.ToString();
         }
 
         /// <summary>

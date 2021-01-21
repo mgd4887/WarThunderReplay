@@ -5,9 +5,6 @@ using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Text;
-using ICSharpCode.SharpZipLib.Zip;
-using ICSharpCode.SharpZipLib.Zip.Compression;
-using ICSharpCode.SharpZipLib.Zip.Compression.Streams;
 
 namespace WarThunderReplay
 {
@@ -19,6 +16,12 @@ namespace WarThunderReplay
         private string _fileName;
         private readonly byte[] replayMagicBytes = { 0xE5, 0xAC, 0x00, 0x10 };
         private readonly byte[] blkMagicBytes = { 0x00, 0x42, 0x42, 0x46 };
+
+        public  ReplaySettings replaySettings { get; private set; }
+
+        public byte[] resultsblkFile { get; private set; }
+
+        public byte[] missionblkFile { get; private set; }
 
         public Replay(string fileName)
         {
@@ -40,16 +43,9 @@ namespace WarThunderReplay
             }
 
             var replayFileVersion = _binaryData.GetBytes(4);
-            var map = _binaryData.GetBytes(128);
-            var missionFile = _binaryData.GetBytes(260);
-            var missionName = _binaryData.GetBytes(128);
-            var time = _binaryData.GetBytes(128);
-            var weather = _binaryData.GetBytes(32);
-            var unknown0 = _binaryData.GetBytes(92);
-            var missionNameLocalization = _binaryData.GetBytes(128);
-            var unknown1 = _binaryData.GetBytes(60);
-            var battleType = _binaryData.GetBytes(128);
-            
+
+            this.replaySettings = new ReplaySettings(_binaryData);
+
             var _ = _binaryData.EndAndGetCurrentSegmentBytes();
 
             var blkMagic = _binaryData.GetBytes(4);
@@ -62,12 +58,13 @@ namespace WarThunderReplay
             var missionblkLength = BitConverter.ToUInt32(_binaryData.GetBytes(4));
             var missionblkData = _binaryData.GetBytes((int) missionblkLength); // lossy conversion. 
 
-            var missionblkFile = _binaryData.EndAndGetCurrentSegmentBytes(); // all BLK data in one var;
+            this.missionblkFile = _binaryData.EndAndGetCurrentSegmentBytes(); // all BLK data in one var;
 
             var Packets = DecompressZLibStream(_binaryData); // TODO: how long is this part?
 
             var bbf = new byte[] { 0x00, 0x42, 0x42, 0x46, 0x03, 0x00 };
             var lastBbfIndex = _binaryData.BackSearch(bbf);
+
             if (lastBbfIndex > 0x445) // server replays will not contain results. 
             {
                 _binaryData.Seek(lastBbfIndex);
@@ -77,13 +74,15 @@ namespace WarThunderReplay
                 var resultsblkLength = BitConverter.ToUInt32(_binaryData.GetBytes(4));
                 var resultsblkData = _binaryData.GetBytes((int) resultsblkLength); // lossy conversion.
 
-                var resultsblkFile = _binaryData.EndAndGetCurrentSegmentBytes(); // all BLK data in one var;
+                this.resultsblkFile = _binaryData.EndAndGetCurrentSegmentBytes(); // all BLK data in one var;
             }
 
 
 
 
         }
+
+
 
         private byte[] DecompressZLibStream(ByteStream binaryData)
         {
