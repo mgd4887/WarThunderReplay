@@ -10,7 +10,6 @@ namespace WarThunderReplay
         static void Main(string[] args)
         {
             var replay = new Replay(args[0]);
-            replay.ParseHeader();
             replay.Parse();
 
             Console.WriteLine("end of program");

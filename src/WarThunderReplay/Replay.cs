@@ -4,7 +4,6 @@ using System.Globalization;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Text;
 
 namespace WarThunderReplay
 {
@@ -32,9 +31,9 @@ namespace WarThunderReplay
         }
 
         /// <summary>
-        /// parses the header of a replay wprl file.
+        /// parses the replay wprl file.
         /// </summary>
-        public void ParseHeader()
+        public void Parse()
         {
             var replayMagic = _binaryData.GetBytes(4);
             if (replayMagic.Equals(replayMagicBytes))
@@ -56,14 +55,14 @@ namespace WarThunderReplay
 
             var unknown2 = _binaryData.GetBytes(4);
             var missionblkLength = BitConverter.ToUInt32(_binaryData.GetBytes(4));
-            var missionblkData = _binaryData.GetBytes((int) missionblkLength); // lossy conversion. 
+            var missionblkData = _binaryData.GetBytes((int) missionblkLength);
 
             this.missionblkFile = _binaryData.EndAndGetCurrentSegmentBytes(); // all BLK data in one var;
 
-            var Packets = DecompressZLibStream(_binaryData); // TODO: how long is this part?
+            var Packets = DecompressZLibStream(_binaryData);
 
             var bbf = new byte[] { 0x00, 0x42, 0x42, 0x46, 0x03, 0x00 };
-            var lastBbfIndex = _binaryData.BackSearch(bbf);
+            var lastBbfIndex = _binaryData.BackSearch(bbf); // not a great way to do this, but currently I have no way to get the length of the zlib stream
 
             if (lastBbfIndex > 0x445) // server replays will not contain results. 
             {
@@ -77,6 +76,8 @@ namespace WarThunderReplay
                 this.resultsblkFile = _binaryData.EndAndGetCurrentSegmentBytes(); // all BLK data in one var;
             }
 
+            // parse packets last
+            ParsePackets(new ByteStream(Packets));
 
 
 
@@ -109,17 +110,14 @@ namespace WarThunderReplay
         /// <summary>
         /// separate out each packet.
         /// </summary>
-        public void Parse()
+        /// <param name="packets"></param>
+        public void ParsePackets(ByteStream packets)
         {
             int offset = 0x0;
             int i = 0;
-            while (_binaryData.HasMore())
+            while (packets.HasMore())
             {
-                if (i == 129)
-                {
-                    Console.WriteLine("");
-                }
-                ExtractNextPacket();
+                ExtractNextPacket(packets);
                 i++;
             }
 
@@ -132,10 +130,10 @@ namespace WarThunderReplay
 
         }
 
-        private void ExtractNextPacket()
+        private void ExtractNextPacket(ByteStream byteStream)
         {
-            var magic = _binaryData.GetByte();
-            var offset = _binaryData.Index;
+            var magic = byteStream.GetByte();
+            var offset = byteStream.Index;
             var magicNumber = int.Parse(magic.ToString());
             ulong packetLength = 0;
             int lengthOffset = 0;
@@ -147,19 +145,19 @@ namespace WarThunderReplay
             }
             else if ((magicNumber & 0x40) > 1) // 0100 0000
             {
-                var nextBytes = _binaryData.GetBytes(1);
+                var nextBytes = byteStream.GetBytes(1);
                 packetLength = GetPacketLength(magicNumber, 0x40, nextBytes);
                 lengthOffset = 2;
             }
             else if ((magicNumber & 0x20) > 1) // 0010 0000
             {
-                var nextBytes = _binaryData.GetBytes(2);
+                var nextBytes = byteStream.GetBytes(2);
                 packetLength = GetPacketLength(magicNumber, 0x20, nextBytes);
                 lengthOffset = 3;
             }
             else if ((magicNumber & 0x10) > 1) // 0001 0000
             {
-                var nextBytes = _binaryData.GetBytes(3);
+                var nextBytes = byteStream.GetBytes(3);
                 packetLength = GetPacketLength(magicNumber, 0x10, nextBytes);
                 lengthOffset = 4;
             }
@@ -169,8 +167,8 @@ namespace WarThunderReplay
                 throw new ArgumentOutOfRangeException();
             }
 
-            _binaryData.GetBytes((int) packetLength);
-            _binaryPackets.Add(new Packet(_binaryData.EndAndGetCurrentSegmentBytes(), lengthOffset, offset));
+            byteStream.GetBytes((int) packetLength);
+            _binaryPackets.Add(new Packet(byteStream.EndAndGetCurrentSegmentBytes(), lengthOffset, offset));
         }
 
         /// <summary>
