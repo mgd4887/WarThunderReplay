@@ -61,28 +61,6 @@ namespace WarThunderReplay
         }
 
         /// <summary>
-        /// Returns the first instance of a string of bytes in the bytestream and returns its offset.
-        /// </summary>
-        /// <param name="bytesToFind">The bytes being searched for.</param>
-        /// <returns>returns -1 is the string is not found
-        /// otherwise it returns the offset of the </returns>
-        public int BackSearch(byte[] bytesToFind)
-        {
-            var length = _bytes.Length;
-            var captureLength = bytesToFind.Length;
-            for (int i = length - captureLength; i >= 0; i--)
-            {
-                var selected = _bytes.Skip(i).Take(captureLength);
-                if (selected.SequenceEqual(bytesToFind))
-                {
-                    return i;
-                }
-            }
-
-            return -1;
-        }
-
-        /// <summary>
         /// Seeks to the given index
         /// WILL CLEAR SAVED BYTES.
         /// </summary>
