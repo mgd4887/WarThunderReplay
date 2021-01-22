@@ -9,18 +9,20 @@ namespace WarThunderReplay
 {
     class Replay
     {
-        private ByteStream _binaryData;
-        private List<Packet> _binaryPackets;
-        private List <TypedPacket> _typedPackets;
+        private readonly ByteStream _binaryData;
+        private readonly List<Packet> _binaryPackets;
+        private readonly List <TypedPacket> _typedPackets;
         private string _fileName;
-        private readonly byte[] replayMagicBytes = { 0xE5, 0xAC, 0x00, 0x10 };
-        private readonly byte[] blkMagicBytes = { 0x00, 0x42, 0x42, 0x46 };
+        private readonly byte[] _replayMagicBytes = { 0xE5, 0xAC, 0x00, 0x10 };
+        private readonly byte[] _blkMagicBytes = { 0x00, 0x42, 0x42, 0x46 };
 
-        public  ReplaySettings replaySettings { get; private set; }
+        public  ReplaySettings ReplaySettings { get; private set; }
 
-        public byte[] resultsblkFile { get; private set; }
+        public int ReplayFileVersion { get; private set; }
 
-        public byte[] missionblkFile { get; private set; }
+        public byte[] ResultsblkFile { get; private set; }
+
+        public byte[] MissionblkFile { get; private set; }
 
         public Replay(string fileName)
         {
@@ -36,19 +38,19 @@ namespace WarThunderReplay
         public void Parse()
         {
             var replayMagic = _binaryData.GetBytes(4);
-            if (replayMagic.Equals(replayMagicBytes))
+            if (replayMagic.Equals(_replayMagicBytes))
             {
                 throw new InvalidDataException("Not a replay file; magic number mismatch");
             }
 
-            var replayFileVersion = _binaryData.GetBytes(4);
+            ReplayFileVersion = BitConverter.ToInt32(_binaryData.GetBytes(4));
 
-            this.replaySettings = new ReplaySettings(_binaryData);
+            ReplaySettings = new ReplaySettings(_binaryData);
 
             var _ = _binaryData.EndAndGetCurrentSegmentBytes();
 
             var blkMagic = _binaryData.GetBytes(4);
-            if (blkMagic.Equals(blkMagicBytes))
+            if (blkMagic.Equals(_blkMagicBytes))
             {
                 throw new InvalidDataException("BLK file not found at expected offset");
             }
@@ -57,35 +59,20 @@ namespace WarThunderReplay
             var missionblkLength = BitConverter.ToUInt32(_binaryData.GetBytes(4));
             var missionblkData = _binaryData.GetBytes((int) missionblkLength);
 
-            this.missionblkFile = _binaryData.EndAndGetCurrentSegmentBytes(); // all BLK data in one var;
+            MissionblkFile = _binaryData.EndAndGetCurrentSegmentBytes(); // all BLK data in one var;
 
-            var Packets = DecompressZLibStream(_binaryData);
-
-            var bbf = new byte[] { 0x00, 0x42, 0x42, 0x46, 0x03, 0x00 };
-            var lastBbfIndex = _binaryData.BackSearch(bbf); // not a great way to do this, but currently I have no way to get the length of the zlib stream
-
-            if (lastBbfIndex > 0x445) // server replays will not contain results. 
-            {
-                _binaryData.Seek(lastBbfIndex);
-                var hasResults = true;
-                var resultsblkMagic = _binaryData.GetBytes(4);
-                var resultsUnknown = _binaryData.GetBytes(4);
-                var resultsblkLength = BitConverter.ToUInt32(_binaryData.GetBytes(4));
-                var resultsblkData = _binaryData.GetBytes((int) resultsblkLength); // lossy conversion.
-
-                this.resultsblkFile = _binaryData.EndAndGetCurrentSegmentBytes(); // all BLK data in one var;
-            }
+            var replayData = DecompressZLibStream(_binaryData);
+            var packets = replayData.Item1;
+            ResultsblkFile = replayData.Item2;
 
             // parse packets last
-            ParsePackets(new ByteStream(Packets));
-
-
+            ParsePackets(new ByteStream(packets));
 
         }
 
 
 
-        private byte[] DecompressZLibStream(ByteStream binaryData)
+        private (byte[], byte[]) DecompressZLibStream(ByteStream binaryData)
         {
             var input = binaryData.GetAllBytesLeft();
             input = input.Skip(2).ToArray(); // remove zlib header.
@@ -94,17 +81,33 @@ namespace WarThunderReplay
             {
                 using (var outputStream = new MemoryStream())
                 {
+                    byte[] resultsBlk;
                     using (DeflateStream decompressionStream =
-                        new DeflateStream(inputStream, CompressionMode.Decompress))
+                        new DeflateStream(inputStream, CompressionMode.Decompress, true))
                     {
-                        decompressionStream.CopyTo(outputStream);
+
+
+
+                        int indexOfEndOfStream = 0;
+                        int data;
+                        do
+                        {
+                            data = decompressionStream.ReadByte(); 
+                            indexOfEndOfStream++;
+                        }
+                        while (data != -1); //returns -1 when it reaches the end of the stream
+                                            // but we need to use the index++ because the position of the INPUT stream is off by ~+5000 of the actual end of the ZLIB stream.
+                                            // I think this is because it searches past the end of the stream for anymore data. but because there is data it goes for a bit
+                                            // to try and find zlib data.
+
+                        binaryData.Seek(indexOfEndOfStream);
+                        resultsBlk = binaryData.GetAllBytesLeft();
                     }
 
-                    var output = outputStream.ToArray();
-                    return output;
+                    var packetStream = outputStream.ToArray();
+                    return (packetStream, resultsBlk);
                 }
             }
-            return null;
         }
 
         /// <summary>
