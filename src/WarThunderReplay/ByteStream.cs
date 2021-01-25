@@ -26,7 +26,7 @@ namespace WarThunderReplay
 
         public byte[] GetAllBytesLeft()
         {
-            return GetBytes(_bytes.Length - 1 - Index);
+            return GetBytes(_bytes.Length - Index);
         }
 
         public byte[] GetBytes(int count)

@@ -6,4 +6,8 @@
     <StartupObject>WarThunderReplay.Program</StartupObject>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Zlib.Portable.Signed" Version="1.11.0" />
+  </ItemGroup>
+
 </Project>

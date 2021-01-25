@@ -3,7 +3,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.IO.Compression;
-using System.Linq;
+using Ionic.Zlib;
+using CompressionMode = Ionic.Zlib.CompressionMode;
 
 namespace WarThunderReplay
 {
@@ -75,39 +76,26 @@ namespace WarThunderReplay
         private (byte[], byte[]) DecompressZLibStream(ByteStream binaryData)
         {
             var input = binaryData.GetAllBytesLeft();
-            input = input.Skip(2).ToArray(); // remove zlib header.
-            
-            using (var inputStream = new MemoryStream(input))
+            byte[] packets;
+            byte[] results;
+
+            using (ZlibStream zlibStream = new ZlibStream(new MemoryStream(input), CompressionMode.Decompress))
             {
-                using (var outputStream = new MemoryStream())
+                using (MemoryStream outStream = new MemoryStream())
                 {
-                    byte[] resultsBlk;
-                    using (DeflateStream decompressionStream =
-                        new DeflateStream(inputStream, CompressionMode.Decompress, true))
-                    {
+                    zlibStream.CopyTo(outStream);
+                    var totalIn = zlibStream.TotalIn;
+                    ByteStream newStream = new ByteStream(input);
+                    newStream.Seek((int)totalIn); /* lossy, but almost impossible we would ever see a 2.14GB+ file.
+                                                    this is also the location of the end of the packet deflate stream. */
 
+                    results = newStream.GetAllBytesLeft();
+                    packets = outStream.ToArray();
 
-
-                        int indexOfEndOfStream = 0;
-                        int data;
-                        do
-                        {
-                            data = decompressionStream.ReadByte(); 
-                            indexOfEndOfStream++;
-                        }
-                        while (data != -1); //returns -1 when it reaches the end of the stream
-                                            // but we need to use the index++ because the position of the INPUT stream is off by ~+5000 of the actual end of the ZLIB stream.
-                                            // I think this is because it searches past the end of the stream for anymore data. but because there is data it goes for a bit
-                                            // to try and find zlib data.
-
-                        binaryData.Seek(indexOfEndOfStream);
-                        resultsBlk = binaryData.GetAllBytesLeft();
-                    }
-
-                    var packetStream = outputStream.ToArray();
-                    return (packetStream, resultsBlk);
                 }
             }
+
+            return (packets, results);
         }
 
         /// <summary>
